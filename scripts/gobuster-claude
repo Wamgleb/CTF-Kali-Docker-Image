@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# gobuster-claude — runs gobuster and pipes output to Claude for analysis
+# Usage: gobuster-claude <url> [wordlist]
+# Example: gobuster-claude http://10.10.11.206
+#          gobuster-claude http://10.10.11.206/api /usr/share/seclists/Discovery/Web-Content/api.txt
+
+set -euo pipefail
+
+URL="${1:?Usage: gobuster-claude <url> [wordlist]}"
+WORDLIST="${2:-/usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt}"
+
+SCAN_DIR="$(pwd)/ctfdata/scans"
+mkdir -p "$SCAN_DIR"
+OUTFILE="$SCAN_DIR/gobuster-$(date +%H%M%S).txt"
+
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo " gobuster-claude → $URL"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+GOBUSTER_OUTPUT=$(docker exec htb-box gobuster dir \
+    -u "$URL" \
+    -w "$WORDLIST" \
+    -x php,html,txt,js,json,xml,bak,old,zip \
+    -t 50 \
+    --no-error \
+    2>&1 | tee "$OUTFILE")
+
+echo "$GOBUSTER_OUTPUT"
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo " Claude analysis:"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+echo "$GOBUSTER_OUTPUT" | claude "
+You are an expert penetration tester reviewing web directory enumeration results for a HackTheBox machine.
+
+Analyze the gobuster output and provide:
+1. Most interesting paths and why (admin panels, config files, APIs, uploads)
+2. Paths that suggest specific technologies or frameworks
+3. Files worth downloading/inspecting immediately
+4. Suggested follow-up enumeration (sub-paths, different wordlists, parameter fuzzing)
+5. Any patterns that suggest the attack vector
+
+Be concise and prioritized. Flag anything unusual immediately.
+"

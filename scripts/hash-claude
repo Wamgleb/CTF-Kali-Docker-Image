@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# hash-claude — identify a hash type and get cracking instructions
+# Usage: hash-claude <hash>
+#        echo "<hash>" | hash-claude
+# Example: hash-claude 5f4dcc3b5aa765d61d8327deb882cf99
+#          cat ctfdata/loot/hashes.txt | hash-claude
+
+set -euo pipefail
+
+if [ -t 0 ]; then
+    # Input from argument
+    HASH="${1:?Usage: hash-claude <hash> OR echo <hash> | hash-claude}"
+else
+    # Input from pipe
+    HASH=$(cat)
+fi
+
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo " hash-claude"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+echo "$HASH" | claude "
+You are an expert at hash identification and password cracking.
+
+For the given hash(es):
+1. Identify the hash type(s) with confidence level
+2. Give the exact hashcat command with correct -m mode and rockyou wordlist:
+   hashcat -m <mode> hash.txt /usr/share/wordlists/rockyou.txt
+3. Give the john command as alternative:
+   john --wordlist=/usr/share/wordlists/rockyou.txt hash.txt
+4. If it looks like an NTLM/NTLMv2 hash, mention pass-the-hash options with netexec
+5. Any other context (e.g. if it's a service-specific hash format)
+
+Be direct, give copy-paste ready commands.
+"

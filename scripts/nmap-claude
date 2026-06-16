@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# nmap-claude — runs nmap and pipes output to Claude for analysis
+# Usage: nmap-claude <target> [nmap flags]
+# Example: nmap-claude 10.10.11.206
+#          nmap-claude 10.10.11.206 -p 80,443,8080
+
+set -euo pipefail
+
+TARGET="${1:?Usage: nmap-claude <target> [nmap flags]}"
+shift || true
+EXTRA_FLAGS="${*:-}"
+
+SCAN_DIR="$(pwd)/ctfdata/scans"
+mkdir -p "$SCAN_DIR"
+OUTFILE="$SCAN_DIR/nmap-$(echo "$TARGET" | tr '.' '-')-$(date +%H%M%S)"
+
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo " nmap-claude → $TARGET"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# Run nmap inside the container (has all network access via --network host)
+NMAP_OUTPUT=$(docker exec htb-box nmap -sC -sV -T4 --open $EXTRA_FLAGS "$TARGET" \
+    --oA "$OUTFILE" 2>&1)
+
+echo "$NMAP_OUTPUT"
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo " Claude analysis:"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+echo "$NMAP_OUTPUT" | claude "
+You are an expert penetration tester reviewing an nmap scan for a HackTheBox machine.
+
+Analyze the scan output and provide:
+1. Most interesting services and why
+2. Likely OS and version if detectable
+3. Specific attack vectors to try first, ordered by priority
+4. Any unusual findings or misconfigurations
+5. Suggested next commands to run
+
+Be concise and actionable. This is a CTF machine so assume it's intentionally vulnerable.
+"
