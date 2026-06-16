@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+# ai-recon — full recon pipeline: nmap + web enum + Claude analysis
+# Usage: ai-recon <target-ip> [machine-name]
+# Example: ai-recon 10.10.11.206
+#          ai-recon 10.10.11.206 Forest
+
+set -euo pipefail
+
+TARGET="${1:?Usage: ai-recon <target-ip> [machine-name]}"
+MACHINE="${2:-$(echo "$TARGET" | tr '.' '-')}"
+
+SCAN_DIR="$(pwd)/ctfdata/scans"
+NOTES_DIR="$(pwd)/ctfdata/notes"
+mkdir -p "$SCAN_DIR" "$NOTES_DIR"
+
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo " ai-recon → $TARGET ($MACHINE)"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# ── Step 1: Quick port scan ──────────────────────────────────
+echo "[1/3] Quick nmap scan..."
+NMAP_QUICK=$(docker exec htb-box nmap -T4 --open -p- "$TARGET" 2>&1)
+echo "$NMAP_QUICK" > "$SCAN_DIR/${MACHINE}-ports.txt"
+
+# Extract open ports for targeted scan
+PORTS=$(echo "$NMAP_QUICK" | grep "^[0-9]" | cut -d'/' -f1 | tr '\n' ',' | sed 's/,$//')
+echo "    Open ports: $PORTS"
+
+# ── Step 2: Service scan on open ports ──────────────────────
+echo "[2/3] Service + script scan on open ports..."
+NMAP_FULL=$(docker exec htb-box nmap -sC -sV -p "$PORTS" "$TARGET" 2>&1)
+echo "$NMAP_FULL" > "$SCAN_DIR/${MACHINE}-services.txt"
+
+# ── Step 3: Web check ───────────────────────────────────────
+WEB_INFO=""
+if echo "$PORTS" | grep -qE "80|443|8080|8443|8000"; then
+    echo "[3/3] Web service detected — quick whatweb..."
+    WEB_INFO=$(docker exec htb-box whatweb "$TARGET" 2>&1 || true)
+    echo "$WEB_INFO" > "$SCAN_DIR/${MACHINE}-web.txt"
+else
+    echo "[3/3] No common web ports detected, skipping web enum"
+fi
+
+# ── Claude analysis ──────────────────────────────────────────
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo " Claude recon summary:"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+ANALYSIS=$(cat << EOF | claude "
+You are an expert penetration tester doing initial recon on a HackTheBox machine called '$MACHINE' ($TARGET).
+
+## Nmap service scan:
+$NMAP_FULL
+
+## Web fingerprint:
+${WEB_INFO:-No web services detected}
+
+Provide a structured recon summary:
+1. **Attack surface** — list every service with version and potential vuln
+2. **Most likely foothold** — top 2-3 attack paths with reasoning
+3. **First commands to run** — copy-paste ready, ordered by priority
+4. **OS guess** — Linux/Windows, likely version
+5. **Red flags** — anything unusual that stands out
+
+Format with markdown headers. Be direct, no fluff.
+"
+EOF
+)
+
+echo "$ANALYSIS"
+
+# ── Save notes ───────────────────────────────────────────────
+NOTES_FILE="$NOTES_DIR/${MACHINE}-recon.md"
+cat > "$NOTES_FILE" << EOF
+# Recon: $MACHINE ($TARGET)
+*Generated: $(date)*
+
+$ANALYSIS
+
+---
+
+## Raw nmap output
+\`\`\`
+$NMAP_FULL
+\`\`\`
+EOF
+
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo " Notes saved → $NOTES_FILE"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

