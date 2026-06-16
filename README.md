@@ -228,6 +228,6 @@ MIT — use it, fork it, adapt it to your own toolkit.
 - [ ] Document example prompts for common CTF scenarios in the README
 
 ### CI / Maintenance
-- [ ] GitHub Actions workflow to build and push image to GHCR on every commit
-- [ ] Weekly scheduled build to pull latest Kali packages and tool updates
+- [+] GitHub Actions workflow to build and push image to GHCR on every commit
+- [+] Weekly scheduled build to pull latest Kali packages and tool updates
 - [ ] Add a `make check` target that verifies all key tools are present and executable after build
