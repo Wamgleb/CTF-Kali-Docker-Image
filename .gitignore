@@ -1,0 +1,45 @@
+# .gitignore for CTF Kali Docker Image project
+
+# CTF working data (contains scans, loot, history, etc.)
+ctfdata/
+
+# Docker artifacts and compose overrides
+docker-compose.override.yml
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+venv/
+env/
+ENV/
+
+# Virtual environment directories
+.venv/
+
+# Node
+node_modules/
+
+# IDEs and editors
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# macOS
+.DS_Store
+
+# Logs and temp
+*.log
+*.tmp
+*.swp
+*.swo
+
+# Secrets and env
+.env
+.env.local
+secrets/
+
+# Build outputs
+/dist/
+/build/
